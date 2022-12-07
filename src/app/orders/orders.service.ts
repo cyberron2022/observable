@@ -1,0 +1,76 @@
+import { HttpClient } from '@angular/common/http';
+import { Injectable } from '@angular/core';
+import { ObservableStore } from '@codewithdan/observable-store';
+import { of, throwError } from 'rxjs';
+import { catchError, map } from 'rxjs/operators';
+
+import { Order } from '../core/model';
+import { StoreState } from '../shared/interfaces';
+
+@Injectable({
+  providedIn: 'root',
+})
+export class OrdersService extends ObservableStore<StoreState> {
+  apiUrl = 'assets/orders.json';
+
+  constructor(private http: HttpClient) {
+    super({ trackStateHistory: true });
+  }
+
+  private fetchOrders() {
+    return this.http.get<Order[]>(this.apiUrl).pipe(
+      map((orders) => {
+        this.setState({ orders }, OrdersStoreActions.GetOrders);
+        console.log(this.stateHistory);
+        return orders;
+      }),
+      catchError(this.handleError)
+    );
+  }
+
+  getAll() {
+    let state = this.getState();
+    // pull from store cache
+    if (state && state.orders) {
+      return of(state.orders);
+    }
+    // doesn't exist in store so fetch from server
+    else {
+      return this.fetchOrders();
+    }
+  }
+
+  get(id: number) {
+    let state = this.getState();
+    // pull from store cache
+    if (state && state.orders) {
+      console.log(this.stateHistory);
+      return of(this.filterOrders(id, state.orders));
+    }
+    // doesn't exist in store so fetch from server
+    else {
+      return this.fetchOrders().pipe(
+        map((orders) => {
+          return this.filterOrders(id, orders);
+        })
+      );
+    }
+  }
+
+  filterOrders(id: number, orders: Order[]) {
+    return orders.filter((order) => +order.customerId === id);
+  }
+
+  private handleError(error: any) {
+    console.error('server error:', error);
+    if (error.error instanceof Error) {
+      const errMessage = error.error.message;
+      return throwError(() => new Error(errMessage));
+    }
+    return throwError(() => error || new Error('Server error'));
+  }
+}
+
+export enum OrdersStoreActions {
+  GetOrders = 'get_orders',
+}
